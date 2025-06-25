@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>互動式動物界探索</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Calm Scholar (Amber-50, Slate-800, Sky-200/800) -->
+    <!-- Application Structure Plan: A single-page application with a top navigation bar (Overview, Invertebrates, Vertebrates, Compare & Explore, Ecology, Quiz). The content area dynamically updates to show different sections. This tabbed/sectioned approach is chosen to break down the dense information into manageable chunks, preventing overwhelm and guiding the user through a logical learning path, from a high-level overview to detailed exploration, comparison, ecological concepts (including various ecosystems), and finally, self-assessment via the quiz. The quiz now includes a question count selection and question category selection for user customization, along with detailed answer explanations. -->
+    <!-- Visualization & Content Choices:
+    - Overview: Goal: Show relative diversity. Viz: Horizontal Bar Chart (Chart.js). Interaction: Hover tooltips. Justification: Provides immediate visual context of which groups are largest.
+    - Classification Details: Goal: Organize detailed facts. Viz: Interactive HTML/CSS Cards. Interaction: Click to expand/collapse. Justification: Progressive disclosure makes information less intimidating and more engaging.
+    - Comparison: Goal: Facilitate active learning by comparing groups. Viz: Dynamic HTML Table. Interaction: Checkbox selection triggers table redraw. Justification: Powerful interactive study tool.
+    - Ecology: Goal: Explain core ecological concepts and different ecosystems. Viz: Text with headings and illustrative emojis/lists. Interaction: Scroll. Justification: Clear, structured textual explanation for foundational concepts and diverse environments.
+    - Quiz: Goal: Self-assessment and knowledge reinforcement. Viz: Interactive Question/Option Display with question count and category selection, timer, and detailed answer rationales. Interaction: Select count/category, click to start/select answer/submit/next/retake, view explanations. Justification: Provides immediate feedback, gauges understanding, allows customizable practice, adds a performance metric (time), and crucially, enhances learning by explaining why answers are correct or incorrect.
+    - Icons: Goal: Add visual cues. Viz: Unicode Emojis. Justification: Lightweight, no external files, and student-friendly. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body { font-family: 'Noto Sans TC', sans-serif; }
+        .chart-container { position: relative; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto; height: 400px; max-height: 50vh; }
+        .nav-link { transition: all 0.3s ease; }
+        .nav-link.active { color: #075985; border-bottom-color: #075985; font-weight: 700; }
+        .animal-card-details {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease-in-out, padding 0.5s ease-in-out;
+            padding: 0 1.5rem;
+        }
+        .animal-card.open .animal-card-details {
+            max-height: 500px;
+            padding: 1rem 1.5rem 1.5rem;
+        }
+        .rotate-180 { transform: rotate(180deg); }
+        .quiz-option { transition: all 0.2s ease; }
+        .quiz-option.selected { @apply ring-2 ring-sky-500 bg-sky-100; }
+        .quiz-option.correct { @apply ring-2 ring-green-500 bg-green-100; }
+        .quiz-option.incorrect { @apply ring-2 ring-red-500 bg-red-100; }
+        .explanation-item { @apply p-2 rounded-md; }
+        .explanation-item.correct-answer { @apply bg-green-50/70 text-green-800 border border-green-200; }
+        .explanation-item.incorrect-chosen { @apply bg-red-50/70 text-red-800 border border-red-200; }
+        .explanation-item.neutral { @apply bg-slate-50/70 text-slate-600 border border-slate-200; }
+    </style>
+</head>
+<body class="bg-amber-50 text-slate-800">
+
+    <div id="app" class="min-h-screen flex flex-col">
+        <header class="bg-white/80 backdrop-blur-sm shadow-sm sticky top-0 z-10">
+            <div class="container mx-auto px-4">
+                <div class="flex justify-between items-center py-4">
+                    <h1 class="text-2xl md:text-3xl font-bold text-slate-800">🌍 探索動物界</h1>
+                </div>
+                <nav id="main-nav" class="flex border-b">
+                    <button data-view="overview" class="nav-link text-slate-600 py-3 px-4 md:px-6 border-b-2 border-transparent hover:text-sky-800">總覽</button>
+                    <button data-view="invertebrates" class="nav-link text-slate-600 py-3 px-4 md:px-6 border-b-2 border-transparent hover:text-sky-800">無脊椎動物</button>
+                    <button data-view="vertebrates" class="nav-link text-slate-600 py-3 px-4 md:px-6 border-b-2 border-transparent hover:text-sky-800">脊椎動物</button>
+                    <button data-view="comparison" class="nav-link text-slate-600 py-3 px-4 md:px-6 border-b-2 border-transparent hover:text-sky-800">比較與探索</button>
+                    <button data-view="ecology" class="nav-link text-slate-600 py-3 px-4 md:px-6 border-b-2 border-transparent hover:text-sky-800">生態概念</button>
+                    <button data-view="quiz" class="nav-link text-slate-600 py-3 px-4 md:px-6 border-b-2 border-transparent hover:text-sky-800">測驗</button>
+                </nav>
+            </div>
+        </header>
+
+        <main class="container mx-auto px-4 py-8 flex-grow">
+            
+            <section id="overview-view">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-2xl font-bold mb-4 text-sky-900">歡迎來到動物的世界！</h2>
+                    <p class="mb-6 text-slate-600">動物界是生命世界中最多樣化的一群。牠們無法自行製造養分，需要攝取其他生物維生。從微小的昆蟲到巨大的藍鯨，牠們展現了各式各樣的生命型態。這個互動應用程式將帶您一覽動物界的主要分類與特徵，並透過比較工具加深您的理解。</p>
+                    <h3 class="text-xl font-bold mb-4 text-sky-800">動物界多樣性概覽</h3>
+                    <p class="mb-4 text-slate-600">動物界中，節肢動物門的物種數量遠遠超過其他所有動物門的總和，展現了其驚人的演化適應能力。下圖顯示了主要動物類群的物種數量相對比例，讓您對動物界的多樣性有更直觀的感受。</p>
+                    <div class="chart-container">
+                        <canvas id="diversityChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <section id="invertebrates-view" class="hidden">
+                 <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-2xl font-bold mb-2 text-sky-900">無脊椎動物 (Invertebrates)</h2>
+                    <p class="mb-6 text-slate-600">無脊椎動物是體內沒有脊椎骨的動物，牠們是動物界中種類與數量最龐大的一群。從水母到昆蟲，牠們的形態、構造與生活方式千變萬化。點擊下方的卡片來探索各個主要門類的奧秘。</p>
+                    <div id="invertebrates-container" class="space-y-4"></div>
+                </div>
+            </section>
+
+            <section id="vertebrates-view" class="hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-2xl font-bold mb-2 text-sky-900">脊椎動物 (Vertebrates)</h2>
+                     <p class="mb-6 text-slate-600">脊椎動物的體內具有由脊椎骨構成的脊柱，這為牠們提供了強大的支撐。從水中的魚類到天空的鳥類，再到我們人類所屬的哺乳類，脊椎動物演化出了高度複雜的生理系統與行為模式。點擊下方的卡片來認識牠們。</p>
+                    <div id="vertebrates-container" class="space-y-4"></div>
+                </div>
+            </section>
+
+            <section id="comparison-view" class="hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-2xl font-bold mb-2 text-sky-900">脊椎動物特徵比較</h2>
+                    <p class="mb-4 text-slate-600">不同綱的脊椎動物為了適應各自的生活環境，演化出不同的生理特徵。請勾選下方您想比較的動物類群（建議2-3個），系統將為您動態生成比較表，幫助您釐清牠們之間的差異。</p>
+                    <div id="comparison-controls" class="mb-6 flex flex-wrap gap-4"></div>
+                    <div class="overflow-x-auto">
+                      <table id="comparison-table" class="w-full min-w-[600px] text-left border-collapse"></table>
+                    </div>
+                </div>
+                 <div class="bg-white p-6 rounded-lg shadow mt-8">
+                    <h2 class="text-2xl font-bold mb-4 text-sky-900">其他重要概念</h2>
+                     <div class="grid md:grid-cols-2 gap-6">
+                        <div>
+                            <h3 class="text-xl font-semibold mb-2 text-sky-800">重要生理系統</h3>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600">
+                                <li><b>循環系統：</b>運輸養分、氧氣與廢物。</li>
+                                <li><b>呼吸系統：</b>進行氣體交換。</li>
+                                <li><b>消化系統：：</b>分解食物、吸收養分。</li>
+                                <li><b>神經系統：</b>傳遞訊息、協調反應。</li>
+                                <li><b>生殖方式：：</b>繁衍後代，有卵生、胎生等。</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-2 text-sky-800">動物與環境</h3>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600">
+                                <li><b>食物鏈/網：：</b>在生態系中扮演消費者角色。</li>
+                                <li><b>棲地適應：：</b>演化出特殊構造與行為以適應環境。</li>
+                                <li><b>行為：：</b>包含覓食、求偶、禦敵、社群等。</li>
+                            </ul>
+                        </div>
+                     </div>
+                </div>
+            </section>
+
+            <section id="ecology-view" class="hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-2xl font-bold mb-4 text-sky-900">生態概念與主要生態系</h2>
+                    <p class="mb-6 text-slate-600">生物與環境之間存在著複雜的關係。了解生態學的基本概念，能幫助我們更好地理解生物在自然界中的組織層次與動態變化。</p>
+                    
+                    <div class="space-y-6 mb-8">
+                        <h3 class="text-xl font-semibold mb-2 text-sky-800">生態組織層次</h3>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">1. 個體 (Individual) 🌱</h4>
+                            <p class="text-slate-600">生態學中最小的研究單位，指單一的生物個體，例如一隻麻雀、一棵樹、一個人。</p>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">2. 族群 (Population) 👨‍👩‍👧‍👦</h4>
+                            <p class="text-slate-600">指在同一時間、同一地點，所有同種生物的個體總和。族群會受到出生率、死亡率、遷入率、遷出率等因素的影響。</p>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                                <li><b>例子：</b>某片森林中的所有台灣黑熊、某個池塘裡的所有吳郭魚。</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">3. 群集 (Community) 🌳🦌🦋</h4>
+                            <p class="text-slate-600">指在同一時間、同一地點，所有不同種類生物的族群集合。群集內的生物族群彼此間會互相影響、競爭或合作。</p>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                                <li><b>例子：</b>某片森林中的所有植物、動物、微生物，牠們共同生活、互動。</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">4. 演替 (Succession) ⏳ ➡️🌳</h4>
+                            <p class="text-slate-600">指一個生態系中的群集組成，隨著時間逐漸且有方向性地改變的過程。通常會從簡單的生物群落，慢慢發展成較複雜且穩定的群落。</p>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                                <li><b>例子：：</b>森林大火後，光禿的土地會先長出草本植物，接著是灌木，最後形成森林。</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <div class="space-y-6">
+                        <h3 class="text-xl font-semibold mb-2 text-sky-800">主要生態系介紹</h3>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">1. 潮間帶 (Intertidal Zone) 🌊🦀</h4>
+                            <p class="text-slate-600">指海岸線介於最高潮位和最低潮位之間的區域。此區的生物必須適應週期性的漲退潮，面臨溫度、鹽度、濕度等環境因子的劇烈變化。</p>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                                <li><b>環境特點：</b>週期性乾濕交替、溫度與鹽度變化大、潮汐作用強。</li>
+                                <li><b>代表生物：</b>招潮蟹、彈塗魚、藤壺、各種貝類、潮間帶藻類。</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">2. 淺海區 (Shallow Sea) 🐠珊瑚</h4>
+                            <p class="text-slate-600">指大陸棚海域，水深通常在200公尺以內，陽光可以穿透到海底。這是海洋中最富有生命力的區域之一。</p>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                                <li><b>環境特點：</b>陽光充足、養分豐富、水流較穩定。</li>
+                                <li><b>代表生物：：</b>各種魚類、珊瑚礁生物、海藻、浮游生物。</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">3. 大洋區 (Open Ocean) 🐳🌌</h4>
+                            <p class="text-slate-600">指遠離海岸、水深超過200公尺的廣闊海域，尤其是深層區域，陽光無法到達。這裡的環境相對穩定，但食物來源稀少。</p>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                                <li><b>環境特點：</b>水壓大、溫度低、缺乏光照、食物來源有限。</li>
+                                <li><b>代表生物：：</b>大型鯨魚、深海魚類、巨烏賊、許多發光生物。</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">4. 河口 (Estuary) 🏞️🐟</h4>
+                            <p class="text-slate-600">指河流與海洋交會的區域，淡水與鹹水在此混合，形成一種特殊的半鹹水環境。</p>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                                <li><b>環境特點：</b>鹽度變化劇烈、泥沙沉積、養分豐富。</li>
+                                <li><b>代表生物：：</b>紅樹林植物、彈塗魚、招潮蟹、多種貝類、魚蝦幼苗的育幼場。</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">5. 草原 (Grassland) 🦒🦁</h4>
+                            <p class="text-slate-600">陸地生態系的一種，主要植被為草本植物，偶爾有零星的樹木。通常分布在降雨量不足以支持森林生長，但又比沙漠多的地區。</p>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                                <li><b>環境特點：</b>季節性降雨（乾濕季分明）、廣闊平坦。</li>
+                                <li><b>代表生物：</b>大型草食動物（如牛、羊、羚羊）、肉食動物（如獅子、狼）、穴居動物（如土撥鼠）。</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">6. 淡水生態系 (Freshwater Ecosystem) 💧🐟</h4>
+                            <p class="text-slate-600">指以淡水為主體的生態系，包含湖泊、池塘、河流、溪流等。根據水流的有無可分為靜止水域和流動水域。</p>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                                <li><b>靜止水域 (Lentic) 🏞️：</b>水流緩慢或靜止，如湖泊、池塘。養分容易累積，水生植物豐富。</li>
+                                <li><b>流動水域 (Lotic) 💦：</b>水流速度快，如河流、溪流。溶氧量高，水生植物附著於底質生長。</li>
+                                <li><b>代表生物：</b>淡水魚類、兩生類幼體、水生昆蟲、藻類、水生植物。</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h4 class="text-lg font-medium mb-1 text-slate-700">7. 沙漠 (Desert) 🏜️🌵</h4>
+                            <p class="text-slate-600">指年降雨量極少（通常少於250毫米）的乾旱地區。生物必須高度適應缺水、日夜溫差大的嚴酷環境。</p>
+                            <ul class="list-disc list-inside space-y-1 text-slate-600 ml-4">
+                                <li><b>環境特點：</b>極度乾燥、日夜溫差大、植被稀疏。</li>
+                                <li><b>代表生物：：</b>仙人掌、駱駝、沙漠狐、響尾蛇、蠍子。</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="quiz-view" class="hidden">
+                <div class="bg-white p-6 rounded-lg shadow">
+                    <h2 class="text-2xl font-bold mb-4 text-sky-900">測驗時間！</h2>
+                    <p class="mb-6 text-slate-600">是時候檢視您對動物界及生態概念的了解了！請仔細閱讀題目並選出正確答案。祝您好運！</p>
+                    
+                    <div id="quiz-start-section">
+                        <p class="mb-4 text-slate-600">請選擇本次測驗的題目類型與數量：</p>
+                        <div class="flex flex-wrap items-center gap-4 mb-6">
+                            <label for="quiz-type" class="text-slate-700">測驗類型：</label>
+                            <select id="quiz-type" class="p-2 border border-slate-300 rounded-md bg-white focus:ring-sky-500 focus:border-sky-500">
+                                <option value="all">全部題目</option>
+                                <option value="general">動物界基礎</option>
+                                <option value="animal_classification_combined">動物分類專題</option>
+                                <option value="ecology">生態概念與生態系</option>
+                                <option value="review_wrong">錯題重練</option>
+                            </select>
+                            <label for="question-count" class="text-slate-700">選擇題數：</label>
+                            <select id="question-count" class="p-2 border border-slate-300 rounded-md bg-white focus:ring-sky-500 focus:border-sky-500">
+                                <!-- Options will be dynamically generated by JS -->
+                            </select>
+                            <button id="start-quiz-btn" class="bg-sky-600 text-white py-2 px-6 rounded-md hover:bg-sky-700 transition-colors duration-300 shadow">開始測驗</button>
+                        </div>
+                    </div>
+
+                    <div id="quiz-container" class="hidden">
+                        <p id="question-counter" class="text-slate-500 text-sm mb-2"></p>
+                        <p id="quiz-timer" class="text-slate-500 text-sm mb-4 text-right">時間：00:00</p>
+                        <h3 id="quiz-question" class="text-xl font-semibold mb-4 text-slate-700"></h3>
+                        <div id="quiz-options" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"></div>
+                        <div id="quiz-feedback" class="text-lg font-semibold mb-4 hidden"></div>
+                        <div id="quiz-explanation-area" class="mt-4 space-y-2 text-sm"></div> {/* New explanation area */}
+                        <div class="flex justify-end gap-4">
+                            <button id="submit-answer-btn" class="bg-sky-600 text-white py-2 px-6 rounded-md hover:bg-sky-700 transition-colors duration-300 shadow">提交答案</button>
+                            <button id="next-question-btn" class="bg-slate-300 text-slate-700 py-2 px-6 rounded-md hover:bg-slate-400 transition-colors duration-300 shadow hidden">下一題</button>
+                            <button id="retake-quiz-btn" class="bg-sky-600 text-white py-2 px-6 rounded-md hover:bg-sky-700 transition-colors duration-300 shadow hidden">重考</button>
+                        </div>
+                    </div>
+                    <div id="quiz-results" class="hidden text-center py-8">
+                        <h3 class="text-2xl font-bold text-sky-900 mb-4">測驗結果</h3>
+                        <p id="final-score" class="text-xl text-slate-700 mb-2"></p>
+                        <p id="time-taken" class="text-xl text-slate-700 mb-6"></p>
+                        <button id="results-retake-quiz-btn" class="bg-sky-600 text-white py-2 px-6 rounded-md hover:bg-sky-700 transition-colors duration-300 shadow">再考一次</button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+        
+        <footer class="text-center py-4 text-sm text-slate-500 bg-white/50">
+            <p>&copy; 2025 互動式動物界探索. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script>
+        const animalData = {
+            invertebrates: [
+                { id: 'cnidaria', name: '刺絲胞動物門', icon: '💧', features: ['身體呈輻射對稱', '具有刺絲胞，用於捕食與防禦'], examples: '水母、珊瑚、海葵' },
+                { id: 'mollusca', name: '軟體動物門', icon: '🐙', features: ['身體柔軟不分節', '通常有外套膜，可分泌貝殼'], examples: '蝸牛、蛤蜊、章魚' },
+                { id: 'annelida', name: '環節動物門', icon: '🐛', features: ['身體由許多相似的環節構成', '身體柔軟，呈兩側對稱'], examples: '蚯蚓、水蛭' },
+                { id: 'arthropoda', name: '節肢動物門', icon: '🦋', features: ['動物界種類最多的一門', '身體與附肢皆分節', '具有外骨骼'], examples: '昆蟲、蝦、蟹、蜘蛛' }
+            ],
+            vertebrates: [
+                { id: 'pisces', name: '魚類', icon: '🐠', features: ['生活在水中，用鰓呼吸', '用鰭游泳', '體表多有鱗片', '大多為卵生、變溫'], examples: '吳郭魚、鯊魚', comparison: { respiration: '鰓', thermoregulation: '變溫', reproduction: '卵生(多數)', heart: '一心房一心室', skin: '鱗片' } },
+                { id: 'amphibia', name: '兩生類', icon: '🐸', features: ['幼體用鰓呼吸，成體用肺和皮膚呼吸', '皮膚裸露濕潤', '繁殖需在水中進行', '卵生、變溫'], examples: '青蛙、蠑螈', comparison: { respiration: '肺+皮膚', thermoregulation: '變溫', reproduction: '卵生', heart: '二心房一心室', skin: '裸露濕潤' } },
+                { id: 'reptilia', name: '爬蟲類', icon: '🐍', features: ['用肺呼吸', '體表有鱗片或骨板防水分散失', '行體內受精，產陸生卵', '卵生、變溫'], examples: '蜥蜴、烏龜、蛇', comparison: { respiration: '肺', thermoregulation: '變溫', reproduction: '卵生', heart: '二心房一心室(不完全分隔)', skin: '乾燥鱗片' } },
+                { id: 'aves', name: '鳥類', icon: '🦅', features: ['用肺呼吸，有氣囊輔助', '身體有羽毛', '前肢特化為翼', '卵生、恆溫'], examples: '麻雀、老鷹、企鵝', comparison: { respiration: '肺+氣囊', thermoregulation: '恆溫', reproduction: '卵生', heart: '二心房二心室', skin: '羽毛' } },
+                { id: 'mammalia', name: '哺乳類', icon: '🦍', features: ['用肺呼吸', '身體有毛髮', '大多為胎生，用乳汁哺育幼兒', '恆溫'], examples: '人類、狗、鯨魚', comparison: { respiration: '肺', thermoregulation: '恆溫', reproduction: '胎生(多數)', heart: '二心房二心室', skin: '毛髮' } },
+            ],
+             comparisonHeaders: {
+                name: '分類',
+                respiration: '呼吸器官',
+                thermoregulation: '體溫',
+                reproduction: '生殖方式',
+                heart: '心臟',
+                skin: '體表'
+            }
+        };
+
+        const allQuizQuestions = [ 
+            // General Animal Kingdom & Basic Ecology (from original 40 questions)
+            { 
+                question: "下列哪種動物是『無脊椎動物』？", 
+                options: ["青蛙", "魚", "水母", "鳥"], 
+                correctAnswerIndex: 2, 
+                category: "general",
+                options_rationale: [
+                    "青蛙屬於脊椎動物中的兩生類。",
+                    "魚屬於脊椎動物中的魚類。",
+                    "水母屬於無脊椎動物中的刺絲胞動物門，體內無脊椎骨。",
+                    "鳥屬於脊椎動物中的鳥類。"
+                ]
+            },
+            { 
+                question: "具有『外骨骼』且身體和附肢分節的動物，屬於哪一個門？", 
+                options: ["軟體動物門", "環節動物門", "刺絲胞動物門", "節肢動物門"], 
+                correctAnswerIndex: 3, 
+                category: "general",
+                options_rationale: [
+                    "軟體動物門的生物身體柔軟，通常有外套膜和貝殼，但無外骨骼和分節附肢。",
+                    "環節動物門的生物身體分節但無外骨骼和分節附肢。",
+                    "刺絲胞動物門的生物身體輻射對稱，無外骨骼和分節附肢。",
+                    "節肢動物門的生物具有堅硬的外骨骼以及分節的身體和附肢，這是其典型特徵。"
+                ]
+            },
+            { 
+                question: "下列哪種動物的『幼體用鰓呼吸，成體用肺和皮膚呼吸』，且繁殖需要水？", 
+                options: ["蛇", "青蛙", "麻雀", "吳郭魚"], 
+                correctAnswerIndex: 1, 
+                category: "vertebrates",
+                options_rationale: [
+                    "蛇屬於爬蟲類，終生用肺呼吸，繁殖不需水。",
+                    "青蛙屬於兩生類，幼體（蝌蚪）用鰓呼吸，成體用肺和皮膚呼吸，且產卵和受精需在水中進行。",
+                    "麻雀屬於鳥類，終生用肺和氣囊呼吸，繁殖不需水。",
+                    "吳郭魚屬於魚類，終生用鰓呼吸，生活在水中。"
+                ]
+            },
+            { 
+                question: "鯨魚雖然生活在水中，但具有下列何種特徵，因此屬於『哺乳類』？", 
+                options: ["用鰓呼吸", "卵生", "體表有鱗片", "胎生並哺乳"], 
+                correctAnswerIndex: 3, 
+                category: "vertebrates",
+                options_rationale: [
+                    "用鰓呼吸是魚類的特徵，鯨魚用肺呼吸。",
+                    "卵生是鳥類、爬蟲類等動物的生殖方式，哺乳類大多胎生。",
+                    "體表有鱗片是魚類和爬蟲類的特徵，哺乳類體表有毛髮。",
+                    "胎生並用乳汁哺育幼體是哺乳類獨有的關鍵特徵，鯨魚符合此點。"
+                ]
+            },
+            { 
+                question: "『恆溫動物』是指下列哪兩種脊椎動物？", 
+                options: ["魚類與兩生類", "爬蟲類與鳥類", "鳥類與哺乳類", "兩生類與爬蟲類"], 
+                correctAnswerIndex: 2, 
+                category: "vertebrates",
+                options_rationale: [
+                    "魚類和兩生類都是變溫動物，體溫隨環境變化。",
+                    "爬蟲類是變溫動物，鳥類是恆溫動物，故此組合不全為恆溫。",
+                    "鳥類和哺乳類都能透過自身代謝維持穩定的體溫，故為恆溫動物。",
+                    "兩生類和爬蟲類都是變溫動物，體溫隨環境變化。"
+                ]
+            },
+            { 
+                question: "以下哪一項不是動物界生物的共同特徵？", 
+                options: ["異營性", "多細胞生物", "細胞具有細胞壁", "多數具運動能力"], 
+                correctAnswerIndex: 2, 
+                category: "general",
+                options_rationale: [
+                    "異營性是動物界的主要特徵，表示無法自行製造養分。",
+                    "多細胞生物是動物界的特徵，由多個細胞組成。",
+                    "細胞具有細胞壁是植物界和菌物界的特徵，動物細胞不具細胞壁。",
+                    "大多數動物都具有主動運動的能力。"
+                ]
+            },
+            { 
+                question: "身體由許多相似的環節組成，且身體柔軟、呈兩側對稱的動物，代表生物是下列何者？", 
+                options: ["水母", "章魚", "蚯蚓", "蝦子"], 
+                correctAnswerIndex: 2, 
+                category: "annelida",
+                options_rationale: [
+                    "水母屬於刺絲胞動物門，身體輻射對稱，無明顯環節。",
+                    "章魚屬於軟體動物門，身體柔軟但不分節。",
+                    "蚯蚓屬於環節動物門，其身體由許多相似的環節構成，柔軟且呈兩側對稱。",
+                    "蝦子屬於節肢動物門，身體和附肢分節，但具有堅硬外骨骼。"
+                ]
+            },
+            { 
+                question: "在生態學中，『所有同種生物在同一時間、同一地點的總和』稱為？", 
+                options: ["個體", "族群", "群集", "生態系"], 
+                correctAnswerIndex: 1, 
+                category: "ecology",
+                options_rationale: [
+                    "個體是指單一的生物體。",
+                    "族群是指在特定時間和地點內，所有同種生物個體的集合。",
+                    "群集是指在特定時間和地點內，所有不同種類生物族群的集合。",
+                    "生態系是指生物群集及其所處的非生物環境的總和。"
+                ]
+            },
+            { 
+                question: "某個森林中，所有樹木、草、昆蟲、鳥類和哺乳動物的集合，在生態學上被稱為？", 
+                options: ["個體", "族群", "群集", "生物圈"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "個體是指單一生物體。",
+                    "族群是指同種生物的集合。",
+                    "群集是指在特定區域內，所有不同種類生物族群的集合，包含植物、動物和微生物等。",
+                    "生物圈是地球上所有生物及其生存環境的總和。"
+                ]
+            },
+            { 
+                question: "森林大火後，裸露的土地上生物群落會隨著時間逐漸改變，最終形成新的森林，這種現象稱為？", 
+                options: ["適應", "演化", "演替", "競爭"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "適應是指生物體為生存而改變自身特徵。",
+                    "演化是指物種在世代間的遺傳性狀變化。",
+                    "演替是指一個生態系中的群集組成，隨著時間逐漸且有方向性地改變的過程。",
+                    "競爭是指不同生物之間對有限資源的爭奪。"
+                ]
+            },
+            { 
+                question: "潮間帶的生物需要適應下列哪一種環境特點？", 
+                options: ["水壓極大", "長期乾燥", "週期性乾濕交替", "缺乏養分"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "水壓極大是大洋深海區的特點。",
+                    "長期乾燥是沙漠的特點。",
+                    "潮間帶受潮汐影響，會週期性地露出水面和被海水淹沒，生物需適應乾濕、溫度和鹽度的劇烈變化。",
+                    "潮間帶通常養分充足。"
+                ]
+            },
+            { 
+                question: "下列哪一項是淺海區的主要環境特點？", 
+                options: ["陽光無法到達", "水壓極大", "陽光充足，養分豐富", "鹽度變化劇烈"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "陽光無法到達是大洋深層區的特點。",
+                    "水壓極大是大洋深海區的特點。",
+                    "淺海區（大陸棚）水深較淺，陽光能穿透，且靠近陸地養分豐富。",
+                    "鹽度變化劇烈是河口區的特點。"
+                ]
+            },
+            { 
+                question: "遠離海岸，水深超過200公尺，陽光無法到達的廣闊海域，屬於哪種生態系？", 
+                options: ["潮間帶", "淺海區", "大洋區", "河口"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "潮間帶是海岸線漲退潮的區域。",
+                    "淺海區是大陸棚海域，陽光可穿透至海底。",
+                    "大洋區指遠離海岸的廣闊海域，尤其是水深超過200公尺的區域，光照不足。",
+                    "河口是河流與海洋交會的半鹹水區域。"
+                ]
+            },
+            { 
+                question: "紅樹林、彈塗魚和招潮蟹是哪種生態系的代表生物？", 
+                options: ["淺海區", "大洋區", "河口", "草原"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "淺海區主要有珊瑚礁生物和各種魚類。",
+                    "大洋區生物多為大型鯨魚或深海魚類。",
+                    "紅樹林、彈塗魚和招潮蟹都適應河口半鹹水、泥沙環境。",
+                    "草原是陸地生態系，以草食和肉食動物為主。"
+                ]
+            },
+            { 
+                question: "以草本植物為主，並有季節性降雨（乾濕季分明）的陸地生態系稱為？", 
+                options: ["森林", "沙漠", "草原", "極地"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "森林是以樹木為主要植被的生態系。",
+                    "沙漠是極度乾燥、降雨量稀少的生態系。",
+                    "草原的特點是主要植被為草本植物，有明顯的乾濕季，降雨量介於森林與沙漠之間。",
+                    "極地是低溫冰雪覆蓋的地區。"
+                ]
+            },
+            { 
+                question: "下列何者是淡水生態系『流動水域』的特點？", 
+                options: ["水流緩慢，養分容易累積", "水流速度快，溶氧量高", "水壓極大，缺乏光照", "鹽度變化劇烈"], 
+                correctAnswerIndex: 1, 
+                category: "ecology",
+                options_rationale: [
+                    "水流緩慢，養分容易累積是靜止水域（如湖泊、池塘）的特點。",
+                    "流動水域（如河流、溪流）因水流湍急，使得水體與空氣接觸面積大，溶氧量通常較高。",
+                    "水壓極大是深海的特點。",
+                    "鹽度變化劇烈是河口區的特點。"
+                ]
+            },
+            { 
+                question: "仙人掌和駱駝等生物，其主要棲息的生態系具有何種環境特點？", 
+                options: ["週期性漲退潮", "陽光充足，養分豐富", "極度乾燥，日夜溫差大", "淡水與鹹水混合"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "週期性漲退潮是潮間帶的特點。",
+                    "陽光充足，養分豐富是淺海區的特點。",
+                    "仙人掌和駱駝都適應沙漠極度缺水和日夜溫差大的嚴酷環境。",
+                    "淡水與鹹水混合是河口區的特點。"
+                ]
+            },
+            { 
+                question: "湖泊和池塘屬於哪一種淡水生態系？", 
+                options: ["流動水域", "靜止水域", "河口", "潮間帶"], 
+                correctAnswerIndex: 1, 
+                category: "ecology",
+                options_rationale: [
+                    "流動水域包括河流和溪流。",
+                    "湖泊和池塘的水流緩慢或靜止，屬於靜止水域。",
+                    "河口是淡水與海水交會處。",
+                    "潮間帶是海岸漲退潮區域。"
+                ]
+            },
+            { 
+                question: "下列哪一項是動物界生物的共同特徵，表示其無法自行製造養分？", 
+                options: ["自營性", "異營性", "光合作用", "化學合成"], 
+                correctAnswerIndex: 1, 
+                category: "general",
+                options_rationale: [
+                    "自營性是植物和部分微生物的特徵，表示能自行製造養分。",
+                    "異營性是動物界的特徵，表示需要攝取外界有機物維生。",
+                    "光合作用是植物和部分微生物自營的方式。",
+                    "化學合成是某些微生物自營的方式。"
+                ]
+            },
+            { 
+                question: "多細胞生物的動物，其細胞不具有下列何種構造？", 
+                options: ["細胞膜", "細胞核", "細胞質", "細胞壁"], 
+                correctAnswerIndex: 3, 
+                category: "general",
+                options_rationale: [
+                    "細胞膜是所有細胞都具備的構造，控制物質進出。",
+                    "細胞核是真核細胞（包括動物細胞）的控制中心。",
+                    "細胞質是細胞膜以內、細胞核以外的物質。",
+                    "細胞壁是植物、真菌、藻類和細菌等細胞具有的堅韌外層，動物細胞沒有細胞壁。"
+                ]
+            },
+            { 
+                question: "下列哪種動物屬於脊椎動物的『兩生類』？", 
+                options: ["鱷魚", "烏龜", "蟾蜍", "鯨魚"], 
+                correctAnswerIndex: 2, 
+                category: "vertebrates",
+                options_rationale: [
+                    "鱷魚屬於爬蟲類。",
+                    "烏龜屬於爬蟲類。",
+                    "蟾蜍屬於兩生類，幼體在水中生活，成體在陸地生活。",
+                    "鯨魚屬於哺乳類。"
+                ]
+            },
+            { 
+                question: "鳥類和哺乳類的主要共同特徵之一是：", 
+                options: ["都是卵生", "都是變溫動物", "體表都有鱗片", "都是恆溫動物"], 
+                correctAnswerIndex: 3, 
+                category: "vertebrates",
+                options_rationale: [
+                    "鳥類是卵生，但哺乳類大多胎生。",
+                    "鳥類和哺乳類都是恆溫動物，能維持體溫穩定，但魚類、兩生類、爬蟲類是變溫動物。",
+                    "鳥類體表有羽毛，哺乳類體表有毛髮，而非鱗片。",
+                    "恆溫動物是鳥類和哺乳類的共同特徵，表示牠們能維持體溫穩定不受外界影響。"
+                ]
+            },
+            { 
+                question: "章魚屬於哪一動物門？", 
+                options: ["刺絲胞動物門", "軟體動物門", "環節動物門", "節肢動物門"], 
+                correctAnswerIndex: 1, 
+                category: "mollusca", // Corrected category to mollusa
+                options_rationale: [
+                    "刺絲胞動物門的代表生物是水母、珊瑚等，具有刺絲胞。",
+                    "章魚身體柔軟，具有外套膜，屬於軟體動物門的頭足綱。",
+                    "環節動物門的代表生物是蚯蚓、水蛭等，身體分節。",
+                    "節肢動物門的代表生物是昆蟲、蜘蛛、蝦蟹等，具有外骨骼和分節附肢。"
+                ]
+            },
+            { 
+                question: "下列哪種節肢動物是『昆蟲綱』的代表？", 
+                options: ["蝦子", "蜘蛛", "螃蟹", "蝴蝶"], 
+                correctAnswerIndex: 3, 
+                category: "arthropoda",
+                options_rationale: [
+                    "蝦子屬於節肢動物門的甲殼綱。",
+                    "蜘蛛屬於節肢動物門的蛛形綱。",
+                    "螃蟹屬於節肢動物門的甲殼綱。",
+                    "蝴蝶屬於節肢動物門的昆蟲綱，身體分為頭、胸、腹三節。"
+                ]
+            },
+            { 
+                question: "在『個體』、『族群』、『群集』中，哪一個層次包含了所有不同種類的生物？", 
+                options: ["個體", "族群", "群集", "生態系"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "個體指單一生物體。",
+                    "族群指同一種生物的集合。",
+                    "群集指不同種類生物族群的集合，強調生物之間的互動，但不包含非生物環境。",
+                    "生態系包含群集和非生物環境。"
+                ]
+            },
+            { 
+                question: "生態演替過程中，通常會從哪種生物群落開始發展？", 
+                options: ["複雜且穩定", "簡單的生物群落", "只有動物的群落", "只有植物的群落"], 
+                correctAnswerIndex: 1, 
+                category: "ecology",
+                options_rationale: [
+                    "複雜且穩定的群落是演替的後期階段（顛峰群落）。",
+                    "演替通常從簡單的先驅生物群落開始，逐漸發展。",
+                    "群落包含植物、動物和微生物，不是只有動物或只有植物。",
+                    "群落包含植物、動物和微生物，不是只有動物或只有植物。"
+                ]
+            },
+            { 
+                question: "潮間帶生物為了適應漲退潮，通常會面臨哪些環境因子的劇烈變化？", 
+                options: ["光照和溫度", "水壓和氧氣", "溫度、鹽度和濕度", "水流和食物"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "光照變化在潮間帶確實存在，但溫度、鹽度和濕度的變化更為劇烈。",
+                    "水壓和氧氣變化不是潮間帶最顯著的特點。",
+                    "潮間帶的生物必須適應週期性的海水漲退，導致溫度、鹽度和濕度隨時間劇烈變化。",
+                    "水流和食物來源可能受潮汐影響，但環境因子的劇烈變化主要體現在溫度、鹽度和濕度。"
+                ]
+            },
+            { 
+                question: "珊瑚礁生態系主要存在於哪種海洋生態系中？", 
+                options: ["大洋區", "淺海區", "河口", "潮間帶"], 
+                correctAnswerIndex: 1, 
+                category: "ecology",
+                options_rationale: [
+                    "大洋區水深且光照不足，不適合珊瑚生長。",
+                    "珊瑚礁需要陽光進行光合作用（與共生藻），因此主要分佈在陽光充足的淺海區。",
+                    "河口是淡鹹水混合的區域，不適合珊瑚礁生長。",
+                    "潮間帶環境變化劇烈，不適合珊瑚礁生長。"
+                ]
+            },
+            { 
+                question: "深海魚類和巨烏賊是大洋區的代表生物，這與該區的哪種環境特點有關？", 
+                options: ["陽光充足", "水流湍急", "水壓大，缺乏光照", "養分豐富"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "大洋深海區陽光無法到達。",
+                    "大洋區水流可能穩定，而非一直湍急。",
+                    "大洋區深層水域的特點是高水壓、低溫且陽光無法到達，生物必須適應這些極端條件。",
+                    "大洋區深層養分通常較貧乏，食物來源有限。"
+                ]
+            },
+            { 
+                question: "河口生態系中，最具代表性的植物之一是：", 
+                options: ["仙人掌", "紅樹林", "藻類", "浮萍"], 
+                correctAnswerIndex: 1, 
+                category: "ecology",
+                options_rationale: [
+                    "仙人掌是沙漠植物。",
+                    "紅樹林植物能適應河口半鹹水、缺氧泥濘的環境，是河口生態系的重要組成部分。",
+                    "藻類廣泛分佈於各水域，但紅樹林更具代表性。",
+                    "浮萍是靜止淡水水域的植物。"
+                ]
+            },
+            { 
+                question: "下列哪組生物最可能在草原生態系中被發現？", 
+                options: ["鯊魚、珊瑚", "駱駝、仙人掌", "獅子、羚羊", "鮭魚、水獺"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "鯊魚和珊瑚是海洋生物。",
+                    "駱駝和仙人掌是沙漠生物。",
+                    "獅子和羚羊是草原生態系中典型的肉食動物和草食動物。",
+                    "鮭魚和水獺是淡水或海洋水域生物。"
+                ]
+            },
+            { 
+                question: "淡水生態系中，水流速度快且溶氧量高的水域稱為？", 
+                options: ["湖泊", "池塘", "流動水域", "靜止水域"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "湖泊和池塘是靜止水域，水流緩慢。",
+                    "流動水域如河流、溪流，因水體流動快，與空氣接觸多，溶氧量較高。",
+                    "水壓極大和缺乏光照是大洋深層的特點。",
+                    "靜止水域水流緩慢，溶氧量相對較低。"
+                ]
+            },
+            { 
+                question: "沙漠生態系最大的環境挑戰是什麼？", 
+                options: ["水壓過大", "鹽度過高", "極度缺水", "溫度過低"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "水壓過大是深海的挑戰。",
+                    "鹽度過高可能是某些極端水域或蒸發量大的湖泊特點，但不是沙漠最主要的。",
+                    "沙漠的定義就是降雨量極少，缺水是其最主要的環境挑戰。",
+                    "沙漠日夜溫差大，白天溫度高，夜間溫度低，但極度缺水是更根本的挑戰。"
+                ]
+            },
+            { 
+                question: "所有在某個池塘中的吳郭魚，在生態學上屬於哪一個層次？", 
+                options: ["個體", "族群", "群集", "生態系"], 
+                correctAnswerIndex: 1, 
+                category: "ecology",
+                options_rationale: [
+                    "個體是指一條吳郭魚。",
+                    "族群是指在特定時間和地點內，所有同種生物個體的集合，符合題幹中所有吳郭魚的描述。",
+                    "群集會包含池塘中所有不同種類的生物。",
+                    "生態系包含池塘中所有生物和非生物環境。"
+                ]
+            },
+            { 
+                question: "生物從簡單群落發展到複雜群落的過程是：", 
+                options: ["競爭", "共生", "演替", "適應"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "競爭是生物間的互動關係。",
+                    "共生是不同物種間的互利或寄生關係。",
+                    "演替描述的是一個生態系中生物群集組成隨時間朝向更複雜、穩定狀態的逐漸變化。",
+                    "適應是生物個體或物種對環境的長期調整。"
+                ]
+            },
+            { 
+                question: "下列哪種環境是『半鹹水』環境？", 
+                options: ["淺海區", "大洋區", "河口", "靜止水域"], 
+                correctAnswerIndex: 2, 
+                category: "ecology",
+                options_rationale: [
+                    "淺海區是鹹水環境。",
+                    "大洋區是鹹水環境。",
+                    "河口是河流淡水與海洋鹹水交匯混合的區域，因此是半鹹水環境。",
+                    "靜止水域（湖泊、池塘）通常是淡水環境。"
+                ]
+            },
+            { 
+                question: "海馬屬於哪一脊椎動物綱？", 
+                options: ["兩生類", "魚類", "爬蟲類", "軟體動物"], 
+                correctAnswerIndex: 1, 
+                category: "vertebrates",
+                options_rationale: [
+                    "兩生類（如青蛙）幼體用鰓、成體用肺和皮膚呼吸。",
+                    "海馬雖然形態特殊，但具有鰓、鰭和體表鱗片等魚類的典型特徵，屬於魚綱。",
+                    "爬蟲類（如蛇）體表有鱗片，用肺呼吸，但繁殖方式不同。",
+                    "軟體動物是無脊椎動物，海馬是脊椎動物。"
+                ]
+            },
+            { 
+                question: "下列哪種動物不是節肢動物門的生物？", 
+                options: ["螃蟹", "蜘蛛", "水蛭", "蜜蜂"], 
+                correctAnswerIndex: 2, 
+                category: "annelida", // Changed category to annelida as water leech is annelid
+                options_rationale: [
+                    "螃蟹是節肢動物門的甲殼綱。",
+                    "蜘蛛是節肢動物門的蛛形綱。",
+                    "水蛭的身體由許多環節組成，屬於環節動物門，而非節肢動物門。",
+                    "蜜蜂是節肢動物門的昆蟲綱。"
+                ]
+            },
+            { 
+                question: "鳥類呼吸時，氣囊的主要功能是？", 
+                options: ["儲存食物", "輔助呼吸", "感受聲音", "平衡體溫"], 
+                correctAnswerIndex: 1, 
+                category: "vertebrates",
+                options_rationale: [
+                    "儲存食物是消化系統的功能。",
+                    "鳥類的氣囊與肺相連，能儲存空氣並協助氣體交換，提供飛行所需的大量氧氣，是輔助呼吸的重要構造。",
+                    "感受聲音是聽覺系統的功能。",
+                    "平衡體溫主要透過代謝和行為來調節，氣囊並非直接的體溫平衡器官。"
+                ]
+            },
+            { 
+                question: "動物體內將養分分解、吸收的主要系統是？", 
+                options: ["循環系統", "呼吸系統", "消化系統", "神經系統"], 
+                correctAnswerIndex: 2, 
+                category: "general",
+                options_rationale: [
+                    "循環系統負責運輸養分、氧氣和廢物。",
+                    "呼吸系統負責氣體交換。",
+                    "消化系統負責將食物分解成小分子並吸收養分。",
+                    "神經系統負責傳遞訊息和協調身體反應。"
+                ]
+            },
+            // 軟體動物門專題題目 (20題) - 這些題目之前已有，現在補齊 rationale
+            { 
+                question: "章魚、蝸牛和蛤蜊都屬於哪一動物門？", 
+                options: ["刺絲胞動物門", "軟體動物門", "環節動物門", "節肢動物門"], 
+                correctAnswerIndex: 1, 
+                category: "mollusca",
+                options_rationale: [
+                    "刺絲胞動物門的代表如水母、珊瑚。",
+                    "章魚、蝸牛和蛤蜊都屬於軟體動物門，其共同特徵是身體柔軟，有外套膜。",
+                    "環節動物門的代表如蚯蚓、水蛭。",
+                    "節肢動物門的代表如昆蟲、蜘蛛、蝦蟹。"
+                ]
+            },
+            { 
+                question: "軟體動物門生物的身體主要有什麼共同特徵？", 
+                options: ["身體分節", "身體柔軟不分節", "身體呈輻射對稱", "具有外骨骼"], 
+                correctAnswerIndex: 1, 
+                category: "mollusca",
+                options_rationale: [
+                    "身體分節是環節動物門和節肢動物門的特徵。",
+                    "軟體動物的名稱就表示其身體柔軟且不分節，這是其最核心的共同特徵。",
+                    "身體呈輻射對稱是刺絲胞動物門的特徵。",
+                    "具有外骨骼是節肢動物門的特徵。"
+                ]
+            },
+            { 
+                question: "大多數軟體動物特有的、能夠分泌貝殼的構造是什麼？", 
+                options: ["中樞神經", "外套膜", "肌肉足", "消化腺"], 
+                correctAnswerIndex: 1, 
+                category: "mollusca",
+                options_rationale: [
+                    "中樞神經是神經系統的一部分，與貝殼分泌無關。",
+                    "外套膜是軟體動物特有的組織，負責分泌鈣質形成貝殼。",
+                    "肌肉足是軟體動物的運動器官，與貝殼分泌無關。",
+                    "消化腺是消化系統的一部分，與貝殼分泌無關。"
+                ]
+            },
+            { 
+                question: "下列哪種軟體動物的貝殼是『兩片』組成的？", 
+                options: ["蝸牛", "章魚", "蛤蜊", "蛞蝓"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "蝸牛是腹足綱，貝殼通常是單一螺旋形。",
+                    "章魚是頭足綱，貝殼通常退化或消失。",
+                    "蛤蜊屬於斧足綱，其貝殼由左右兩片組成，能開合保護身體。",
+                    "蛞蝓是腹足綱，外殼已完全退化或消失。"
+                ]
+            },
+            { 
+                question: "章魚和魷魚屬於軟體動物門的哪個綱？", 
+                options: ["腹足綱", "斧足綱", "頭足綱", "多板綱"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "腹足綱的代表是蝸牛、蛞蝓。",
+                    "斧足綱的代表是蛤蜊、牡蠣。",
+                    "章魚和魷魚具有發達的頭部和腕足，屬於頭足綱。",
+                    "多板綱的代表是石鱉。"
+                ]
+            },
+            { 
+                question: "蝸牛和蛞蝓屬於軟體動物門的哪個綱？", 
+                options: ["頭足綱", "腹足綱", "斧足綱", "掘足綱"], 
+                correctAnswerIndex: 1, 
+                category: "mollusca",
+                options_rationale: [
+                    "頭足綱的代表是章魚、魷魚。",
+                    "蝸牛和蛞蝓主要以其腹足爬行，且部分種類有螺旋殼，屬於腹足綱。",
+                    "斧足綱的代表是蛤蜊、牡蠣。",
+                    "掘足綱的代表是象牙貝。"
+                ]
+            },
+            { 
+                question: "海星和海膽不屬於軟體動物門，那牠們屬於哪個門？", 
+                options: ["刺絲胞動物門", "環節動物門", "棘皮動物門", "節肢動物門"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "刺絲胞動物門的代表如水母、珊瑚。",
+                    "環節動物門的代表如蚯蚓、水蛭。",
+                    "海星和海膽的體表有棘刺，具有管足，屬於棘皮動物門。",
+                    "節肢動物門的代表如昆蟲、蜘蛛、蝦蟹。"
+                ]
+            },
+            { 
+                question: "軟體動物主要利用什麼器官進行呼吸？", 
+                options: ["氣管", "鰓或肺", "皮膚", "書肺"], 
+                correctAnswerIndex: 1, 
+                category: "mollusca",
+                options_rationale: [
+                    "氣管是昆蟲等節肢動物的呼吸器官。",
+                    "水生軟體動物（如蛤蜊、章魚）主要用鰓呼吸；陸生軟體動物（如蝸牛）則有類似肺的構造進行氣體交換。",
+                    "皮膚呼吸是兩生類和蚯蚓等動物的重要呼吸方式，但不是軟體動物主要的。",
+                    "書肺是部分蛛形綱動物的呼吸器官。"
+                ]
+            },
+            { 
+                question: "下列哪種軟體動物沒有明顯的外殼，或外殼已退化為內殼？", 
+                options: ["扇貝", "蝸牛", "蛤蜊", "蛞蝓"], 
+                correctAnswerIndex: 3, 
+                category: "mollusca",
+                options_rationale: [
+                    "扇貝有兩片明顯的貝殼。",
+                    "蝸牛有單一螺旋形的外殼。",
+                    "蛤蜊有兩片明顯的貝殼。",
+                    "蛞蝓是陸生腹足綱動物，外殼已完全退化或僅存於體內，所以外表看不到明顯的殼。"
+                ]
+            },
+            { 
+                question: "大多數軟體動物的循環系統為何種形式？", 
+                options: ["閉鎖式循環", "開放式循環", "無循環系統", "淋巴循環"], 
+                correctAnswerIndex: 1, 
+                category: "mollusca",
+                options_rationale: [
+                    "閉鎖式循環是血液在血管內流動，如哺乳類和鳥類，以及部分軟體動物（如頭足綱）才具有。",
+                    "開放式循環是血液從血管流出到體腔內，再回到心臟，這是大多數軟體動物（如腹足綱、斧足綱）的循環系統形式。",
+                    "無循環系統通常指非常簡單的生物，如刺絲胞動物。",
+                    "淋巴循環是脊椎動物免疫系統的一部分。"
+                ]
+            },
+            { 
+                question: "扇貝的眼睛通常位於哪個身體部位？", 
+                options: ["頭部", "足部", "外套膜邊緣", "貝殼上"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "扇貝沒有明顯的頭部。",
+                    "足部是運動器官。",
+                    "扇貝的眼睛呈藍色珠狀，排列在其外套膜的邊緣，能感知光線和運動。",
+                    "貝殼是保護構造，不長眼睛。"
+                ]
+            },
+            { 
+                question: "軟體動物的『齒舌』主要功能是什麼？", 
+                options: ["消化食物", "感覺環境", "刮食食物", "分泌黏液"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "消化食物是消化腺和消化道的其他部分功能。",
+                    "感覺環境主要是觸角和眼的功能。",
+                    "齒舌是軟體動物（除了斧足綱外）口中特有的帶狀構造，表面有許多齒狀突起，用於刮食、磨碎食物。",
+                    "分泌黏液主要是外套膜或足部的功能。"
+                ]
+            },
+            { 
+                question: "下列哪種軟體動物主要以其腹面的大塊肌肉『足』進行爬行移動？", 
+                options: ["章魚", "蛤蜊", "蝸牛", "魷魚"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "章魚和魷魚主要利用噴射推進移動。",
+                    "蛤蜊主要利用斧足在泥沙中挖掘移動。",
+                    "蝸牛屬於腹足綱，其腹面發達的肌肉質『足』用於爬行移動。",
+                    "魷魚和章魚類似，主要利用噴射推進移動。"
+                ]
+            },
+            { 
+                question: "大多數軟體動物是生活在哪種環境？", 
+                options: ["陸地", "淡水", "海洋", "空中"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "部分軟體動物（如蝸牛、蛞蝓）生活在陸地。",
+                    "部分軟體動物（如淡水螺、淡水蚌）生活在淡水。",
+                    "軟體動物門是海洋中第二大動物類群，絕大多數種類生活在海洋中。",
+                    "軟體動物不生活在空中。"
+                ]
+            },
+            { 
+                question: "珍珠是由哪種軟體動物在貝殼內分泌形成的？", 
+                options: ["蝸牛", "章魚", "牡蠣", "螺"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "蝸牛不分泌珍珠。",
+                    "章魚不分泌珍珠。",
+                    "牡蠣等雙殼綱貝類在外套膜受到刺激時，會分泌珍珠質將刺激物包裹起來，形成珍珠。",
+                    "螺類不分泌珍珠。"
+                ]
+            },
+            { 
+                question: "軟體動物中，具有高度發達的大腦和複雜行為，並能快速變換體色的綱是？", 
+                options: ["腹足綱", "斧足綱", "頭足綱", "多板綱"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "腹足綱（如蝸牛）的行為相對簡單。",
+                    "斧足綱（如蛤蜊）的行為也相對簡單，主要濾食和挖掘。",
+                    "頭足綱（如章魚、魷魚）具有非常發達的神經系統、大腦，能學習、解決問題，並透過色素細胞快速變換體色進行偽裝或溝通。",
+                    "多板綱（如石鱉）的行為相對簡單。"
+                ]
+            },
+            { 
+                question: "螺類動物的殼呈螺旋狀生長，這是哪種軟體動物的典型特徵？", 
+                options: ["頭足綱", "腹足綱", "斧足綱", "掘足綱"], 
+                correctAnswerIndex: 1, 
+                category: "mollusca",
+                options_rationale: [
+                    "頭足綱的貝殼多已退化或消失，不呈螺旋狀。",
+                    "腹足綱（如蝸牛、螺）是軟體動物中種類最多的一綱，其特徵之一就是通常具有單一的螺旋狀貝殼。",
+                    "斧足綱（如蛤蜊）的貝殼是兩片，不呈螺旋狀。",
+                    "掘足綱（如象牙貝）的貝殼呈管狀或象牙狀。"
+                ]
+            },
+            { 
+                question: "下列哪種軟體動物主要以『濾食』水中的微小生物為生？", 
+                options: ["章魚", "蝸牛", "牡蠣", "烏賊"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "章魚是肉食性，捕食魚蝦蟹。",
+                    "蝸牛多為草食性，刮食植物。",
+                    "牡蠣屬於斧足綱，其鰓和外套膜會形成濾食構造，過濾水中的浮游生物為食。",
+                    "烏賊是肉食性，捕食小魚蝦。"
+                ]
+            },
+            { 
+                question: "軟體動物中，能利用外套腔噴水進行『噴射推進』式快速移動的是哪類？", 
+                options: ["蝸牛", "蛤蜊", "章魚", "石鱉"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "蝸牛透過肌肉足爬行。",
+                    "蛤蜊透過斧足挖掘或偶爾噴水移動。",
+                    "章魚和魷魚（頭足綱）可以透過外套膜的強烈收縮，將水從虹吸管噴出，產生噴射推進力快速移動。",
+                    "石鱉透過腹足爬行。"
+                ]
+            },
+            { 
+                question: "軟體動物和環節動物都屬於無脊椎動物，但軟體動物沒有下列哪一項環節動物的特徵？", 
+                options: ["異營性", "多細胞", "身體分節", "具有肌肉"], 
+                correctAnswerIndex: 2, 
+                category: "mollusca",
+                options_rationale: [
+                    "軟體動物和環節動物都是異營性。",
+                    "軟體動物和環節動物都是多細胞生物。",
+                    "環節動物的身體由許多環節構成，而軟體動物的身體通常柔軟且不分節。",
+                    "軟體動物和環節動物都具有肌肉。"
+                ]
+            },
+            // 刺絲胞動物門專題 (5題) - 補齊 rationale
+            { 
+                question: "下列哪種動物屬於刺絲胞動物門？", 
+                options: ["海葵", "蛤蜊", "蚯蚓", "蜘蛛"], 
+                correctAnswerIndex: 0, 
+                category: "cnidaria",
+                options_rationale: [
+                    "海葵是刺絲胞動物門的代表生物，具有刺絲胞。",
+                    "蛤蜊屬於軟體動物門。",
+                    "蚯蚓屬於環節動物門。",
+                    "蜘蛛屬於節肢動物門。"
+                ]
+            },
+            { 
+                question: "刺絲胞動物門生物的身體對稱方式通常是？", 
+                options: ["兩側對稱", "輻射對稱", "放射對稱", "不對稱"], 
+                correctAnswerIndex: 1, 
+                category: "cnidaria",
+                options_rationale: [
+                    "兩側對稱是大多數動物（如人類、魚類）的對稱方式。",
+                    "刺絲胞動物（如水母、海葵）的身體呈輻射對稱，身體部位圍繞中心點徑向排列。",
+                    "放射對稱是輻射對稱的一種形式，但輻射對稱是更廣泛的稱呼。",
+                    "不對稱是指身體沒有固定對稱軸，如海綿。"
+                ]
+            },
+            { 
+                question: "刺絲胞動物特有的、用於捕食和防禦的細胞是？", 
+                options: ["肌肉細胞", "神經細胞", "刺絲胞", "腺細胞"], 
+                correctAnswerIndex: 2, 
+                category: "cnidaria",
+                options_rationale: [
+                    "肌肉細胞用於運動。",
+                    "神經細胞用於傳遞訊息。",
+                    "刺絲胞（或稱刺細胞、螫細胞）是刺絲胞動物門獨有的細胞，內含刺絲囊，能射出有毒的刺絲用於捕食和防禦。",
+                    "腺細胞用於分泌物質。"
+                ]
+            },
+            { 
+                question: "珊瑚屬於哪一動物門？", 
+                options: ["軟體動物門", "刺絲胞動物門", "環節動物門", "棘皮動物門"], 
+                correctAnswerIndex: 1, 
+                category: "cnidaria",
+                options_rationale: [
+                    "軟體動物門的代表如章魚、蝸牛。",
+                    "珊瑚是刺絲胞動物門的代表生物，與海葵、水母親緣關係近，能分泌鈣質骨骼形成珊瑚礁。",
+                    "環節動物門的代表如蚯蚓。",
+                    "棘皮動物門的代表如海星、海膽。"
+                ]
+            },
+            { 
+                question: "水母的身體形態主要為何？", 
+                options: ["分節狀", "柔軟有殼", "傘狀或鐘狀", "扁平帶吸盤"], 
+                correctAnswerIndex: 2, 
+                category: "cnidaria",
+                options_rationale: [
+                    "分節狀是環節動物和節肢動物的特徵。",
+                    "柔軟有殼是部分軟體動物的特徵。",
+                    "水母的身體通常呈傘狀或鐘狀，能在水中漂浮或收縮運動。",
+                    "扁平帶吸盤是部分寄生性動物的特徵。"
+                ]
+            },
+            // 環節動物門專題 (5題) - 補齊 rationale
+            { 
+                question: "下列哪種動物是環節動物門的代表？", 
+                options: ["水蛭", "蝸牛", "海葵", "蝦子"], 
+                correctAnswerIndex: 0, 
+                category: "annelida",
+                options_rationale: [
+                    "水蛭的身體由許多環節構成，是環節動物門的典型代表。",
+                    "蝸牛屬於軟體動物門。",
+                    "海葵屬於刺絲胞動物門。",
+                    "蝦子屬於節肢動物門。"
+                ]
+            },
+            { 
+                question: "環節動物門生物的身體有何顯著特徵？", 
+                options: ["身體柔軟無分節", "身體分節", "身體有刺絲胞", "身體有外骨骼"], 
+                correctAnswerIndex: 1, 
+                category: "annelida",
+                options_rationale: [
+                    "身體柔軟無分節是軟體動物的特徵。",
+                    "環節動物門的名稱就表示其身體由一系列相似的環節構成，這是其最顯著的特徵。",
+                    "身體有刺絲胞是刺絲胞動物的特徵。",
+                    "身體有外骨骼是節肢動物的特徵。"
+                ]
+            },
+            { 
+                question: "蚯蚓在土壤中的活動對農業有何幫助？", 
+                options: ["製造毒素", "增加土壤肥力", "傳播疾病", "消耗養分"], 
+                correctAnswerIndex: 1, 
+                category: "annelida",
+                options_rationale: [
+                    "蚯蚓不製造毒素。",
+                    "蚯蚓透過鑽洞和攝食土壤，能疏鬆土壤、增加通氣性，並將有機質分解為植物可利用的養分，增加土壤肥力。",
+                    "蚯蚓通常不傳播疾病。",
+                    "蚯蚓分解有機質有助於養分循環，而非消耗養分。"
+                ]
+            },
+            { 
+                question: "環節動物的體腔是何種類型？", 
+                options: ["無體腔", "假體腔", "真體腔", "開放體腔"], 
+                correctAnswerIndex: 2, 
+                category: "annelida",
+                options_rationale: [
+                    "無體腔動物如扁形動物。",
+                    "假體腔動物如線形動物。",
+                    "環節動物（如蚯蚓）具有被中胚層細胞完全包覆的真體腔，這對其運動和器官發育很重要。",
+                    "開放體腔不是體腔的分類類型，開放式循環系統中血液流經體腔。"
+                ]
+            },
+            { 
+                question: "下列哪項不是環節動物的特徵？", 
+                options: ["兩側對稱", "體壁有環肌與縱肌", "具有外骨骼", "具有封閉式循環"], 
+                correctAnswerIndex: 2, 
+                category: "annelida",
+                options_rationale: [
+                    "環節動物身體呈兩側對稱。",
+                    "環節動物體壁具有環肌和縱肌，協助其伸縮蠕動。",
+                    "具有外骨骼是節肢動物門的特徵，環節動物沒有外骨骼。",
+                    "環節動物（如蚯蚓）具有封閉式循環系統，血液在血管內流動。"
+                ]
+            },
+            // 節肢動物門專題 (5題) - 補齊 rationale
+            { 
+                question: "哪一個動物門是地球上物種數量最多的？", 
+                options: ["軟體動物門", "節肢動物門", "脊索動物門", "環節動物門"], 
+                correctAnswerIndex: 1, 
+                category: "arthropoda",
+                options_rationale: [
+                    "軟體動物門的物種數量次於節肢動物門。",
+                    "節肢動物門（包含昆蟲、甲殼類、蛛形綱等）的物種數量佔地球上已知動物物種的絕大多數，是種類最多的動物門。",
+                    "脊索動物門包含脊椎動物，物種數量相對較少。",
+                    "環節動物門物種數量也遠少於節肢動物門。"
+                ]
+            },
+            { 
+                question: "節肢動物生長時需要經歷什麼特殊過程，因為其外骨骼無法隨身體長大？", 
+                options: ["冬眠", "遷徙", "蛻皮", "變態"], 
+                correctAnswerIndex: 2, 
+                category: "arthropoda",
+                options_rationale: [
+                    "冬眠是部分動物適應低溫的行為。",
+                    "遷徙是動物的週期性移動。",
+                    "節肢動物的外骨骼堅硬無法隨身體長大，因此必須週期性地脫去舊殼，長出新殼，稱為蛻皮。",
+                    "變態是指幼體與成體形態差異很大的發育過程，如蝴蝶的完全變態，但蛻皮是生長過程中的必須步驟。"
+                ]
+            },
+            { 
+                question: "下列哪種動物屬於節肢動物門的甲殼綱？", 
+                options: ["蜘蛛", "蝗蟲", "螃蟹", "蜜蜂"], 
+                correctAnswerIndex: 2, 
+                category: "arthropoda",
+                options_rationale: [
+                    "蜘蛛屬於蛛形綱。",
+                    "蝗蟲屬於昆蟲綱。",
+                    "螃蟹屬於甲殼綱，大多水生，體表有堅硬的甲殼。",
+                    "蜜蜂屬於昆蟲綱。"
+                ]
+            },
+            { 
+                question: "昆蟲的身體主要分為哪三個部分？", 
+                options: ["頭、胸、腹", "頭、軀幹、尾", "頭胸部、腹部", "頭、足、翅"], 
+                correctAnswerIndex: 0, 
+                category: "arthropoda",
+                options_rationale: [
+                    "昆蟲的身體明確分為頭部、胸部和腹部，這是昆蟲綱的典型特徵。",
+                    "頭、軀幹、尾是魚類等脊椎動物的身體分部方式。",
+                    "頭胸部、腹部是蜘蛛和蝦蟹（甲殼綱、蛛形綱）的身體分部方式。",
+                    "頭、足、翅是功能部位而非身體分部。"
+                ]
+            },
+            { 
+                question: "節肢動物的附肢有何特點？", 
+                options: ["無分節", "不成對", "具有分節", "柔軟無骨"], 
+                correctAnswerIndex: 2, 
+                category: "arthropoda",
+                options_rationale: [
+                    "無分節不符合節肢動物的特徵。",
+                    "節肢動物的附肢通常成對。",
+                    "節肢動物的名稱『節肢』就表示其足部和身體其他附肢都具有分節，這讓牠們能進行多樣的運動和功能。",
+                    "節肢動物的附肢通常堅硬，內部有肌肉連接。"
+                ]
+            },
+            // 脊椎動物總覽專題 (5題) - 補齊 rationale
+            { 
+                question: "下列哪種脊椎動物同時用肺和濕潤的皮膚進行呼吸？", 
+                options: ["魚類", "兩生類", "爬蟲類", "鳥類"], 
+                correctAnswerIndex: 1, 
+                category: "vertebrates",
+                options_rationale: [
+                    "魚類用鰓呼吸。",
+                    "兩生類（如青蛙）的幼體用鰓，成體則用肺和濕潤的皮膚進行氣體交換。",
+                    "爬蟲類只用肺呼吸，皮膚乾燥有鱗片。",
+                    "鳥類用肺和氣囊呼吸。"
+                ]
+            },
+            { 
+                question: "體表有羽毛且恆溫的脊椎動物屬於哪一綱？", 
+                options: ["魚綱", "爬蟲綱", "鳥綱", "哺乳綱"], 
+                correctAnswerIndex: 2, 
+                category: "vertebrates",
+                options_rationale: [
+                    "魚綱是變溫動物，體表有鱗片。",
+                    "爬蟲綱是變溫動物，體表有鱗片或骨板。",
+                    "鳥綱的動物體表被羽毛覆蓋，是恆溫動物，能維持穩定的體溫。",
+                    "哺乳綱是恆溫動物，但體表有毛髮而非羽毛。"
+                ]
+            },
+            { 
+                question: "下列哪種脊椎動物是胎生，並用乳汁哺育幼體？", 
+                options: ["企鵝", "鱷魚", "鴨嘴獸", "海豚"], 
+                correctAnswerIndex: 3, 
+                category: "vertebrates",
+                options_rationale: [
+                    "企鵝是鳥類，卵生。",
+                    "鱷魚是爬蟲類，卵生。",
+                    "鴨嘴獸雖然是哺乳類，但它是少數的卵生哺乳類。",
+                    "海豚是典型的哺乳類，胎生並用乳汁哺育幼體。"
+                ]
+            },
+            { 
+                question: "魚類利用什麼器官來適應水中生活並獲取氧氣？", 
+                options: ["肺", "氣囊", "鰓", "皮膚"], 
+                correctAnswerIndex: 2, 
+                category: "vertebrates",
+                options_rationale: [
+                    "肺是陸生脊椎動物的呼吸器官。",
+                    "氣囊是鳥類輔助呼吸的構造。",
+                    "鰓是魚類在水中進行氣體交換的器官，能夠從水中過濾氧氣。",
+                    "皮膚是部分動物（如兩生類）輔助呼吸的器官，但不是魚類主要的。"
+                ]
+            },
+            { 
+                question: "所有爬蟲類動物的生殖方式通常為何？", 
+                options: ["卵生且卵無殼", "卵生且產硬殼卵於陸地", "胎生", "卵胎生"], 
+                correctAnswerIndex: 1, 
+                category: "vertebrates",
+                options_rationale: [
+                    "卵生且卵無殼是魚類和兩生類的生殖方式。",
+                    "爬蟲類是第一批真正完全適應陸地生活的脊椎動物，其特徵是產下帶有堅韌外殼的卵（羊膜卵），並在陸地上孵化。",
+                    "胎生是哺乳類的主要生殖方式。",
+                    "卵胎生是卵在母體內孵化，如某些魚類和爬蟲類，但不是所有爬蟲類主要的方式，且選項強調『產卵於陸地』。"
+                ]
+            }
+        ];
+
+        let incorrectQuestions = []; // Array to store incorrectly answered questions
+        let currentQuizQuestions = []; 
+        let currentQuestionIndex = 0;
+        let score = 0;
+        let selectedAnswerIndex = -1;
+        let quizAttempted = false;
+        let quizStartTime; 
+        let timerInterval; 
+
+        const quizStartSection = document.getElementById('quiz-start-section');
+        const quizTypeSelect = document.getElementById('quiz-type'); 
+        const questionCountSelect = document.getElementById('question-count');
+        const startQuizBtn = document.getElementById('start-quiz-btn');
+        const quizContainer = document.getElementById('quiz-container');
+        const quizResults = document.getElementById('quiz-results');
+        const questionCounter = document.getElementById('question-counter');
+        const quizTimerDisplay = document.getElementById('quiz-timer'); 
+        const quizQuestion = document.getElementById('quiz-question');
+        const quizOptionsDiv = document.getElementById('quiz-options');
+        const quizFeedback = document.getElementById('quiz-feedback');
+        const quizExplanationArea = document.getElementById('quiz-explanation-area'); // Get the new explanation area
+        const submitAnswerBtn = document.getElementById('submit-answer-btn');
+        const nextQuestionBtn = document.getElementById('next-question-btn');
+        const retakeQuizBtn = document.getElementById('retake-quiz-btn');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const timeTakenDisplay = document.getElementById('time-taken'); 
+        const resultsRetakeQuizBtn = document.getElementById('results-retake-quiz-btn');
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const nav = document.getElementById('main-nav');
+            const views = document.querySelectorAll('main > section');
+            const navLinks = nav.querySelectorAll('.nav-link');
+
+            function switchView(viewId) {
+                views.forEach(view => {
+                    view.classList.toggle('hidden', view.id !== `${viewId}-view`);
+                });
+                navLinks.forEach(link => {
+                    link.classList.toggle('active', link.dataset.view === viewId);
+                });
+                if (viewId === 'quiz') {
+                    quizStartSection.classList.remove('hidden');
+                    quizContainer.classList.add('hidden');
+                    quizResults.classList.add('hidden');
+                    populateQuestionCountOptions(); 
+                } else {
+                    stopTimer(); 
+                }
+            }
+
+            nav.addEventListener('click', (e) => {
+                if (e.target.matches('.nav-link')) {
+                    const viewId = e.target.dataset.view;
+                    switchView(viewId);
+                }
+            });
+
+            function createAnimalCard(group) {
+                const card = document.createElement('div');
+                card.className = 'animal-card bg-amber-100/50 rounded-lg border border-amber-200';
+                card.innerHTML = `
+                    <button class="w-full flex justify-between items-center text-left p-4">
+                        <h3 class="text-xl font-semibold text-slate-700">${group.icon} ${group.name}</h3>
+                        <span class="text-2xl font-light text-slate-500 transition-transform duration-300">⌄</span>
+                    </button>
+                    <div class="animal-card-details text-slate-600">
+                        <ul class="list-disc list-inside space-y-2 mb-3">
+                            ${group.features.map(f => `<li>${f}</li>`).join('')}
+                        </ul>
+                        <p><b>代表生物：</b>${group.examples}</p>
+                    </div>
+                `;
+                card.querySelector('button').addEventListener('click', () => {
+                    card.classList.toggle('open');
+                    card.querySelector('button span').classList.toggle('rotate-180');
+                });
+                return card;
+            }
+
+            function populateCards() {
+                const invertebratesContainer = document.getElementById('invertebrates-container');
+                animalData.invertebrates.forEach(group => {
+                    invertebratesContainer.appendChild(createAnimalCard(group));
+                });
+
+                const vertebratesContainer = document.getElementById('vertebrates-container');
+                animalData.vertebrates.forEach(group => {
+                    vertebratesContainer.appendChild(createAnimalCard(group));
+                });
+            }
+            
+            function initDiversityChart() {
+                const ctx = document.getElementById('diversityChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['節肢動物', '軟體動物', '脊椎動物', '環節動物', '刺絲胞動物'],
+                        datasets: [{
+                            label: '物種估計數量級',
+                            data: [1000000, 200000, 65000, 22000, 11000],
+                            backgroundColor: [
+                                'rgba(14, 165, 233, 0.6)',
+                                'rgba(56, 189, 248, 0.6)',
+                                'rgba(125, 211, 252, 0.6)',
+                                'rgba(186, 230, 253, 0.6)',
+                                'rgba(224, 242, 254, 0.6)'
+                            ],
+                            borderColor: [
+                                'rgba(14, 165, 233, 1)',
+                                'rgba(56, 189, 248, 1)',
+                                'rgba(125, 211, 252, 1)',
+                                'rgba(186, 230, 253, 1)',
+                                'rgba(224, 242, 254, 1)'
+                            ],
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false },
+                            title: {
+                                display: true,
+                                text: '主要動物類群物種數量比較（對數尺度概念）'
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        let label = context.dataset.label || '';
+                                        if (label) {
+                                            label += ': ';
+                                        }
+                                        if (context.parsed.x !== null) {
+                                            label += `約 ${new Intl.NumberFormat().format(context.parsed.x)} 種`;
+                                        }
+                                        return label;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            x: {
+                                type: 'logarithmic',
+                                title: {
+                                    display: true,
+                                    text: '物種數量（對數尺度）'
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            function setupComparisonTool() {
+                const controlsContainer = document.getElementById('comparison-controls');
+                animalData.vertebrates.forEach(group => {
+                    const control = document.createElement('label');
+                    control.className = 'inline-flex items-center space-x-2 p-2 rounded-md bg-slate-100 hover:bg-slate-200 cursor-pointer';
+                    control.innerHTML = `
+                        <input type="checkbox" data-group-id="${group.id}" class="comparison-checkbox h-4 w-4 rounded border-gray-300 text-sky-600 focus:ring-sky-500">
+                        <span>${group.icon} ${group.name}</span>
+                    `;
+                    controlsContainer.appendChild(control);
+                });
+                
+                document.querySelectorAll('.comparison-checkbox').forEach(checkbox => {
+                    checkbox.addEventListener('change', updateComparisonTable);
+                });
+            }
+
+            function updateComparisonTable() {
+                const selectedGroupIds = Array.from(document.querySelectorAll('.comparison-checkbox:checked'))
+                                              .map(cb => cb.dataset.groupId);
+                
+                const selectedGroups = animalData.vertebrates.filter(g => selectedGroupIds.includes(g.id));
+                const table = document.getElementById('comparison-table');
+                table.innerHTML = ''; 
+
+                if (selectedGroups.length === 0) {
+                    return;
+                }
+
+                const headers = ['name', ...Object.keys(animalData.vertebrates[0].comparison)];
+                
+                const thead = document.createElement('thead');
+                thead.className = 'bg-sky-100';
+                let headerRow = '<tr>';
+                headers.forEach(headerKey => {
+                    headerRow += `<th class="p-3 font-semibold text-sm text-sky-900 border-b-2 border-sky-200">${animalData.comparisonHeaders[headerKey]}</th>`;
+                });
+                headerRow += '</tr>';
+                thead.innerHTML = headerRow;
+                table.appendChild(thead);
+
+                const tbody = document.createElement('tbody');
+                selectedGroups.forEach(group => {
+                    let bodyRow = '<tr class="hover:bg-amber-100/30 border-b border-slate-200">';
+                    headers.forEach((headerKey, index) => {
+                         const value = headerKey === 'name' ? `${group.icon} ${group.name}` : group.comparison[headerKey];
+                         const cellClass = index === 0 ? 'p-3 font-semibold' : 'p-3';
+                         bodyRow += `<td class="${cellClass}">${value}</td>`;
+                    });
+                    bodyRow += '</tr>';
+                    tbody.innerHTML += bodyRow;
+                });
+                table.appendChild(tbody);
+            }
+            
+            // Quiz functions
+            function getQuestionsForSelectedType() {
+                const quizType = quizTypeSelect.value;
+                if (quizType === 'all') {
+                    return allQuizQuestions;
+                } else if (quizType === 'review_wrong') {
+                    return incorrectQuestions;
+                } else if (quizType === 'animal_classification_combined') {
+                    // Combine questions from specific animal classification categories
+                    return allQuizQuestions.filter(q => 
+                        ['cnidaria', 'mollusca', 'annelida', 'arthropoda', 'vertebrates'].includes(q.category)
+                    );
+                }
+                else {
+                    return allQuizQuestions.filter(q => q.category === quizType);
+                }
+            }
+
+            function populateQuestionCountOptions() {
+                const availableQuestions = getQuestionsForSelectedType();
+                const maxQuestions = availableQuestions.length;
+                questionCountSelect.innerHTML = '';
+
+                if (maxQuestions === 0 && quizTypeSelect.value === 'review_wrong') {
+                    const option = document.createElement('option');
+                    option.value = 0;
+                    option.textContent = '無錯題可供練習';
+                    questionCountSelect.appendChild(option);
+                    startQuizBtn.disabled = true; // Disable start button if no questions
+                    return;
+                } else if (maxQuestions === 0) {
+                     const option = document.createElement('option');
+                    option.value = 0;
+                    option.textContent = '此類型無題目';
+                    questionCountSelect.appendChild(option);
+                    startQuizBtn.disabled = true;
+                    return;
+                }
+                
+                startQuizBtn.disabled = false; // Enable button
+
+                for (let i = 5; i <= maxQuestions; i += 5) {
+                    const option = document.createElement('option');
+                    option.value = i;
+                    option.textContent = `${i} 題`;
+                    questionCountSelect.appendChild(option);
+                }
+                
+                if (maxQuestions % 5 !== 0 || maxQuestions === 0) {
+                     const option = document.createElement('option');
+                     option.value = maxQuestions;
+                     option.textContent = `所有 ${maxQuestions} 題`;
+                     questionCountSelect.appendChild(option);
+                } else if (maxQuestions > 0 && maxQuestions % 5 === 0) {
+                     questionCountSelect.value = maxQuestions; 
+                }
+                
+                if (maxQuestions > 0) {
+                    questionCountSelect.value = Math.min(10, maxQuestions); 
+                } else {
+                    questionCountSelect.value = 0; 
+                }
+            }
+
+            function shuffleArray(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+            }
+
+            function startTimer() {
+                quizStartTime = new Date().getTime();
+                timerInterval = setInterval(updateTimerDisplay, 1000);
+            }
+
+            function stopTimer() {
+                clearInterval(timerInterval);
+            }
+
+            function updateTimerDisplay() {
+                const currentTime = new Date().getTime();
+                const elapsedTime = Math.floor((currentTime - quizStartTime) / 1000);
+                quizTimerDisplay.textContent = `時間：${formatTime(elapsedTime)}`;
+            }
+
+            function formatTime(seconds) {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                const formattedMinutes = minutes < 10 ? '0' + minutes : minutes;
+                const formattedSeconds = remainingSeconds < 10 ? '0' + remainingSeconds : remainingSeconds;
+                return `${formattedMinutes}:${formattedSeconds}`;
+            }
+
+            function startQuiz() {
+                const selectedQuestionsPool = getQuestionsForSelectedType();
+                const numQuestions = parseInt(questionCountSelect.value);
+                
+                if (isNaN(numQuestions) || numQuestions <= 0 || numQuestions > selectedQuestionsPool.length) {
+                    const errorMessage = document.createElement('div');
+                    errorMessage.className = 'bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4';
+                    errorMessage.textContent = '請選擇有效的題目數量！';
+                    quizStartSection.prepend(errorMessage);
+                    setTimeout(() => errorMessage.remove(), 3000); 
+                    return;
+                }
+
+                // Clear incorrectQuestions only if starting a NEW, non-review quiz
+                if (quizTypeSelect.value !== 'review_wrong') {
+                    incorrectQuestions = []; 
+                }
+
+                shuffleArray(selectedQuestionsPool); // Shuffle the selected pool
+                currentQuizQuestions = selectedQuestionsPool.slice(0, numQuestions);
+                
+                currentQuestionIndex = 0;
+                score = 0;
+                selectedAnswerIndex = -1;
+                quizAttempted = false; 
+
+                quizStartSection.classList.add('hidden');
+                quizResults.classList.add('hidden');
+                quizContainer.classList.remove('hidden');
+                startTimer(); 
+                renderQuizQuestion();
+            }
+
+            function renderQuizQuestion() {
+                quizFeedback.classList.add('hidden');
+                quizFeedback.textContent = '';
+                quizExplanationArea.innerHTML = ''; // Clear previous explanation
+                quizExplanationArea.classList.add('hidden'); // Hide explanation area initially
+                submitAnswerBtn.classList.remove('hidden');
+                nextQuestionBtn.classList.add('hidden');
+                retakeQuizBtn.classList.add('hidden'); 
+                quizOptionsDiv.querySelectorAll('.quiz-option').forEach(option => {
+                    option.classList.remove('selected', 'correct', 'incorrect');
+                    option.classList.remove('pointer-events-none'); 
+                });
+                selectedAnswerIndex = -1;
+
+                if (currentQuestionIndex < currentQuizQuestions.length) {
+                    const question = currentQuizQuestions[currentQuestionIndex];
+                    questionCounter.textContent = `第 ${currentQuestionIndex + 1} 題 / 共 ${currentQuizQuestions.length} 題`;
+                    quizQuestion.textContent = question.question;
+                    quizOptionsDiv.innerHTML = '';
+                    question.options.forEach((option, index) => {
+                        const optionBtn = document.createElement('button');
+                        optionBtn.className = 'quiz-option w-full text-left p-3 border border-slate-300 rounded-md hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-sky-500';
+                        optionBtn.dataset.index = index;
+                        optionBtn.textContent = option;
+                        optionBtn.addEventListener('click', () => selectAnswer(index));
+                        quizOptionsDiv.appendChild(optionBtn);
+                    });
+                } else {
+                    showQuizResults();
+                }
+            }
+
+            function selectAnswer(index) {
+                if (selectedAnswerIndex === -1) { 
+                    selectedAnswerIndex = index;
+                    quizOptionsDiv.querySelectorAll('.quiz-option').forEach((optionBtn, idx) => {
+                        optionBtn.classList.toggle('selected', idx === index);
+                    });
+                }
+            }
+
+            function checkAnswer() {
+                if (selectedAnswerIndex === -1) {
+                    quizFeedback.textContent = '請選擇一個答案！';
+                    quizFeedback.classList.remove('hidden');
+                    quizFeedback.classList.remove('text-green-600', 'text-red-600');
+                    quizFeedback.classList.add('text-amber-600');
+                    return;
+                }
+
+                const currentQuestion = currentQuizQuestions[currentQuestionIndex];
+                const isCorrect = selectedAnswerIndex === currentQuestion.correctAnswerIndex;
+
+                quizOptionsDiv.querySelectorAll('.quiz-option').forEach((optionBtn, idx) => {
+                    optionBtn.classList.add('pointer-events-none'); 
+                    if (idx === currentQuestion.correctAnswerIndex) {
+                        optionBtn.classList.add('correct');
+                    } else if (idx === selectedAnswerIndex && !isCorrect) {
+                        optionBtn.classList.add('incorrect');
+                    }
+                });
+
+                if (isCorrect) {
+                    score++;
+                    quizFeedback.textContent = '答對了！👍';
+                    quizFeedback.classList.remove('text-amber-600', 'text-red-600');
+                    quizFeedback.classList.add('text-green-600');
+                } else {
+                    quizFeedback.textContent = '答錯了！😭 正確答案是：' + currentQuestion.options[currentQuestion.correctAnswerIndex];
+                    quizFeedback.classList.remove('text-amber-600', 'text-green-600');
+                    quizFeedback.classList.add('text-red-600');
+                    // Add to wrong questions list only if it's not already in there (for review_wrong mode)
+                    if (!incorrectQuestions.includes(currentQuestion)) {
+                        incorrectQuestions.push(currentQuestion); 
+                    }
+                }
+                quizFeedback.classList.remove('hidden');
+                submitAnswerBtn.classList.add('hidden');
+                nextQuestionBtn.classList.remove('hidden');
+                quizAttempted = true; 
+
+                // Display detailed explanation
+                quizExplanationArea.innerHTML = `
+                    <h4 class="font-bold text-slate-800 mb-2">答案解析：</h4>
+                    ${currentQuestion.options.map((option, idx) => {
+                        let className = 'explanation-item';
+                        if (idx === currentQuestion.correctAnswerIndex) {
+                            className += ' correct-answer';
+                        } else if (idx === selectedAnswerIndex && !isCorrect) {
+                            className += ' incorrect-chosen';
+                        } else {
+                             className += ' neutral'; // For unchosen incorrect answers
+                        }
+                        const rationaleText = currentQuestion.options_rationale && currentQuestion.options_rationale[idx] 
+                                              ? currentQuestion.options_rationale[idx] 
+                                              : '無詳細解釋。';
+                        return `
+                            <div class="${className}">
+                                <p><strong>${String.fromCharCode(65 + idx)}. ${option}</strong></p>
+                                <p>${rationaleText}</p>
+                            </div>
+                        `;
+                    }).join('')}
+                `;
+                quizExplanationArea.classList.remove('hidden');
+            }
+
+            function nextQuestion() {
+                currentQuestionIndex++;
+                if (currentQuestionIndex < currentQuizQuestions.length) {
+                    renderQuizQuestion();
+                } else {
+                    showQuizResults();
+                }
+            }
+
+            function showQuizResults() {
+                stopTimer(); 
+                const endTime = new Date().getTime();
+                const totalTimeInSeconds = Math.floor((endTime - quizStartTime) / 1000);
+
+                quizContainer.classList.add('hidden');
+                quizResults.classList.remove('hidden');
+                finalScoreDisplay.textContent = `您的分數是：${score} / ${currentQuizQuestions.length}`;
+                timeTakenDisplay.textContent = `總共花費時間：${formatTime(totalTimeInSeconds)}`;
+            }
+
+            function resetQuiz() {
+                quizStartSection.classList.remove('hidden');
+                quizContainer.classList.add('hidden');
+                quizResults.classList.add('hidden');
+                score = 0; 
+                currentQuestionIndex = 0; 
+                quizAttempted = false; 
+                selectedAnswerIndex = -1; 
+                stopTimer(); 
+                quizTimerDisplay.textContent = '時間：00:00'; 
+                populateQuestionCountOptions(); 
+            }
+
+            startQuizBtn.addEventListener('click', startQuiz);
+            submitAnswerBtn.addEventListener('click', checkAnswer);
+            nextQuestionBtn.addEventListener('click', nextQuestion);
+            resultsRetakeQuizBtn.addEventListener('click', resetQuiz);
+            retakeQuizBtn.addEventListener('click', resetQuiz);
+            quizTypeSelect.addEventListener('change', populateQuestionCountOptions); 
+
+            // Initial setup
+            populateCards();
+            initDiversityChart();
+            setupComparisonTool();
+            updateComparisonTable();
+            switchView('overview'); 
+        });
+    </script>
+</body>
+</html>
+ 
